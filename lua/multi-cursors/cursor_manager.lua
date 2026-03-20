@@ -295,11 +295,24 @@ function CursorManager:reapply_visual_selection()
   end
 end
 
---- Refresh highlights on all cursors (useful after mode transitions
---- where positions don't change but display position should, e.g. insert mode)
+--- Refresh highlights on ALL cursors by clearing the entire namespace
+--- and recreating every extmark from scratch. This nuclear approach
+--- ensures no stale extmarks can persist.
 function CursorManager:refresh_all_highlights()
+  highlight.clear_all(self.bufnr)
   for _, c in ipairs(self.cursors) do
-    c:update_highlight()
+    -- Recreate cursor highlight at insert_col if in insert mode
+    local pos = c.position
+    if c.insert_col then
+      pos = { c.position[1], c.insert_col }
+    end
+    c.cursor_extmark_id = highlight.highlight_cursor(c.bufnr, pos)
+    -- Recreate visual highlight if present
+    if #c.visual > 0 then
+      c.visual_extmark_id = highlight.highlight_region(c.bufnr, c.visual)
+    else
+      c.visual_extmark_id = nil
+    end
   end
 end
 

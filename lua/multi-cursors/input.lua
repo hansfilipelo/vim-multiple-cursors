@@ -430,10 +430,17 @@ function M.wait_for_input(cm, mode, config)
       end
     until false
 
-    -- After fan-out: refresh all cursor highlights so they're visible.
-    -- Especially important for insert mode where insert_col differs from position.
+    -- After every fan-out: nuclear refresh of all highlights.
+    -- Clears all extmarks and recreates them from current state.
+    cm:refresh_all_highlights()
+
+    -- In insert mode, position the Vim cursor at cursor 1's insert point
+    -- so the user has a visible real cursor there too.
     if M.to_mode == "i" then
-      cm:refresh_all_highlights()
+      local primary = cm:get(1)
+      if primary and primary.insert_col then
+        vim.fn.cursor(primary.position[1], primary.insert_col)
+      end
     end
 
     -- Continue loop with updated mode

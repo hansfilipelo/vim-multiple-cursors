@@ -28,6 +28,10 @@ end
 function M.highlight_cursor(bufnr, pos)
   local line = pos[1] - 1 -- 0-indexed
   local col = pos[2] - 1 -- 0-indexed byte
+  local line_count = vim.api.nvim_buf_line_count(bufnr)
+  if line < 0 or line >= line_count then
+    return nil
+  end
   local line_text = vim.api.nvim_buf_get_lines(bufnr, line, line + 1, false)[1] or ""
   local line_len = #line_text
 

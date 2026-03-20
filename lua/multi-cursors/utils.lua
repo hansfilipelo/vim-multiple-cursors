@@ -77,7 +77,7 @@ end
 
 --- Exit visual mode and return to normal mode, preserving cursor position.
 function M.exit_visual_mode()
-  vim.cmd([[normal! \<Esc>gv\<Esc>]])
+  vim.cmd('execute "normal! \\<Esc>gv\\<Esc>"')
 end
 
 --- Select a region in visual mode
@@ -92,7 +92,7 @@ function M.select_in_visual_mode(rgn)
     vim.cmd("normal! v``")
   end
   -- Reselect to set '< and '> marks
-  vim.cmd([[normal! \<Esc>gv]])
+  vim.cmd('execute "normal! \\<Esc>gv"')
 end
 
 --- Update '< and '> marks to match a region, ending in normal mode

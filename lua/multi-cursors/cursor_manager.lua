@@ -221,9 +221,9 @@ function CursorManager:update_current(from_mode, to_mode)
 
   if to_mode == "v" or to_mode == "V" then
     if to_mode == "V" then
-      vim.cmd([[normal! gvv\<Esc>]])
+      vim.cmd('execute "normal! gvv\\<Esc>"')
     end
-    vim.cmd([[normal! gv\<Esc>]])
+    vim.cmd('execute "normal! gv\\<Esc>"')
     cur:update_visual_selection(utils.get_visual_region(utils.pos(".")), to_mode)
   elseif from_mode == "v" or from_mode == "V" then
     cur:save_unnamed_register()

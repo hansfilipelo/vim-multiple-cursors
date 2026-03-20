@@ -28,6 +28,7 @@ function Cursor.new(position, bufnr)
   self.cursor_extmark_id = highlight.highlight_cursor(bufnr, position)
   self.visual_extmark_id = nil
   self.line_length = vim.fn.col({ position[1], "$" })
+  self.insert_col = nil -- insert mode column (set when entering insert mode)
   -- Open any fold at this position
   pcall(function()
     vim.cmd(position[1] .. "foldopen!")
@@ -58,6 +59,9 @@ function Cursor:move(dline, dcol)
     self.visual[1][2] = self.visual[1][2] + dcol
     self.visual[2][1] = self.visual[2][1] + dline
     self.visual[2][2] = self.visual[2][2] + dcol
+  end
+  if self.insert_col then
+    self.insert_col = self.insert_col + dcol
   end
   self:update_highlight()
 end

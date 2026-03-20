@@ -14,6 +14,9 @@ M.bad_input = 0
 M.saved_keys = ""
 M.retry_keys = ""
 
+-- Pre-computed key codes
+local esc = vim.api.nvim_replace_termcodes("<Esc>", true, true, true)
+
 --- Consume any typeahead that arrived between getchar() calls
 ---@return string consumed keys
 local function consume_typeahead()
@@ -29,8 +32,8 @@ local function consume_typeahead()
 end
 
 --- Revert Vim to the appropriate mode for replay
----@param from string current mode
----@param to string target mode
+---@param from string current mode (M.to_mode from previous cursor)
+---@param to string target mode (M.from_mode, what user was in)
 local function revert_mode(from, to, cm)
   if to == "v" then
     cm:reapply_visual_selection()
@@ -38,18 +41,11 @@ local function revert_mode(from, to, cm)
     cm:reapply_visual_selection()
     vim.cmd("normal! V")
   elseif to == "n" and from == "i" then
+    -- Previous cursor ended in logical insert mode, but with feedkeys+"x"
+    -- we're already in normal mode. stopinsert is a safe no-op here.
     vim.cmd("stopinsert")
-  elseif to == "i" and vim.fn.mode() ~= "i" then
-    -- Re-enter insert mode if we've been kicked out.
-    -- After exiting insert mode the cursor moves one left,
-    -- so use 'a' (append) to compensate back to the original column.
-    -- At column 1 'a' would overshoot, so use 'startinsert' instead.
-    if vim.fn.col(".") <= 1 then
-      vim.cmd("startinsert")
-    else
-      vim.cmd("noautocmd normal! a")
-    end
   end
+  -- Note: to == "i" is handled separately via atomic insert in process_at_cursor
 end
 
 --- Handle I/A in visual mode → transition to insert
@@ -74,59 +70,131 @@ local function handle_visual_IA_to_insert(cm)
   end
 end
 
---- Process user input at one cursor, then move to the next.
---- This is the core "fan-out" function.
+--- Ensure Vim is in normal mode before repositioning
+local function ensure_normal_mode()
+  local m = vim.fn.mode():sub(1, 1)
+  if m == "i" or m == "s" then
+    vim.cmd("stopinsert")
+  elseif m == "v" or m == "V" or m == "\22" then
+    vim.cmd('execute "normal! \\<Esc>"')
+  end
+end
+
+--- Process user input at one cursor in insert mode.
+--- Uses atomic "i" + char + Esc to avoid Vim's feedkeys exiting insert mode.
 ---@param cm CursorManager
 ---@param config table
-local function process_at_cursor(cm, config)
+---@return boolean done
+local function process_insert_at_cursor(cm, config)
   local cur = cm:get_current()
-  vim.fn.cursor(cur.position)
+  ensure_normal_mode()
 
-  -- Revert to the mode the user was in
+  local is_exit = (M.char == esc) or (M.char == "\x03") -- Esc or Ctrl-C
+
+  if is_exit then
+    -- Exiting insert mode: position cursor one left of insert point (Vim convention)
+    local exit_col = math.max(1, (cur.insert_col or cur.position[2]) - 1)
+    vim.fn.cursor(cur.position[1], exit_col)
+    cur.insert_col = nil
+
+    cur:update_line_length()
+    M.saved_linecount = vim.fn.line("$")
+    cm._saved_linecount = M.saved_linecount
+
+    if M.to_mode == "" then
+      M.to_mode = "n"
+    end
+  else
+    -- Atomic insert: position at insert_col, type char via "i" + char + Esc
+    local ic = cur.insert_col or cur.position[2]
+    vim.fn.cursor(cur.position[1], ic)
+
+    cur:update_line_length()
+    M.saved_linecount = vim.fn.line("$")
+    cm._saved_linecount = M.saved_linecount
+
+    pcall(vim.cmd, "undojoin")
+
+    vim.api.nvim_feedkeys("i" .. M.char .. esc, "n", false)
+    vim.api.nvim_feedkeys("", "x", false)
+
+    -- Update insert_col: after "i" + char + Esc, cursor is on the typed char.
+    -- The next insert point is one past that.
+    cur.insert_col = vim.fn.col(".") + 1
+
+    if M.to_mode == "" then
+      M.to_mode = "i"
+    end
+  end
+
+  cm:update_current(M.from_mode, M.to_mode)
+  cm:next()
+  return cm:loop_done()
+end
+
+--- Process user input at one cursor in non-insert mode.
+--- Uses InsertEnter autocmd to detect transitions into insert mode,
+--- since feedkeys+"x" always exits insert mode.
+---@param cm CursorManager
+---@param config table
+---@return boolean done
+local function process_normal_at_cursor(cm, config)
+  local cur = cm:get_current()
+  ensure_normal_mode()
+
+  vim.fn.cursor(cur.position)
   revert_mode(M.to_mode, M.from_mode, cm)
 
-  -- Update line length before applying action
   cur:update_line_length()
   M.saved_linecount = vim.fn.line("$")
   cm._saved_linecount = M.saved_linecount
 
-  -- Restore per-cursor unnamed register before replay
   if M.from_mode == "n" or M.from_mode == "v" or M.from_mode == "V" then
     cur:restore_unnamed_register()
   end
 
-  -- Join undos in insert mode
-  if M.from_mode == "i" or M.to_mode == "i" then
+  if M.to_mode == "i" then
     pcall(vim.cmd, "undojoin")
   end
 
-  -- Execute the user's keys
-  local ok = true
-  local old_mode = vim.fn.mode(1)
+  -- Detect insert mode transitions via InsertEnter autocmd
+  local detected_insert = false
+  local insert_col = nil
+  local augroup = vim.api.nvim_create_augroup("mc_insert_detect", { clear = true })
+  vim.api.nvim_create_autocmd("InsertEnter", {
+    group = augroup,
+    once = true,
+    callback = function()
+      detected_insert = true
+      insert_col = vim.fn.col(".")
+    end,
+  })
+
   vim.api.nvim_feedkeys(M.char, "", false)
-  -- Force processing of feedkeys
   vim.api.nvim_feedkeys("", "x", false)
 
-  local new_mode_raw = vim.fn.mode(1)
-  local new_mode = new_mode_raw:sub(1, 1)
-  -- Normalize mode
-  if new_mode == "n" or new_mode == "i" then
-    -- keep as is
-  elseif new_mode == "v" or new_mode == "V" or new_mode == "\22" then
-    if new_mode == "V" then
-      new_mode = "V"
-    elseif new_mode == "\22" then
-      new_mode = "v" -- treat block visual as visual for our purposes
-    else
-      new_mode = "v"
-    end
-  elseif new_mode == "s" or new_mode == "S" then
-    new_mode = "v" -- select mode → treat as visual
+  pcall(vim.api.nvim_del_augroup_by_id, augroup)
+
+  -- Determine the resulting mode
+  local new_mode
+  if detected_insert then
+    new_mode = "i"
+    cur.insert_col = insert_col
   else
-    new_mode = "n"
+    local new_mode_raw = vim.fn.mode(1):sub(1, 1)
+    if new_mode_raw == "v" or new_mode_raw == "V" or new_mode_raw == "\22" then
+      if new_mode_raw == "V" then
+        new_mode = "V"
+      else
+        new_mode = "v"
+      end
+    elseif new_mode_raw == "s" or new_mode_raw == "S" then
+      new_mode = "v"
+    else
+      new_mode = "n"
+    end
   end
 
-  -- Save to_mode only on first cursor
   if M.to_mode == "" then
     M.to_mode = new_mode
     if M.to_mode == "v" then
@@ -137,12 +205,8 @@ local function process_at_cursor(cm, config)
     end
   end
 
-  -- Update the current cursor's state
   cm:update_current(M.from_mode, M.to_mode)
-
-  -- Advance to next
   cm:next()
-
   return cm:loop_done()
 end
 
@@ -266,7 +330,7 @@ function M.wait_for_input(cm, mode, config)
       end
     end
 
-    -- Clear echo area (mode-safe, unlike normal! : which exits insert mode)
+    -- Clear echo area
     vim.cmd("echo ''")
 
     -- Check for special keys (next/prev/skip) and quit key
@@ -328,10 +392,10 @@ function M.wait_for_input(cm, mode, config)
       elseif (M.from_mode == "v" or M.from_mode == "V") and config.exit_from_visual_mode then
         should_exit = true
       elseif M.from_mode == "i" and config.exit_from_insert_mode then
-        vim.cmd("stopinsert")
         should_exit = true
       end
       if should_exit then
+        ensure_normal_mode()
         cm:reset(true, true, true)
         return
       end
@@ -348,7 +412,12 @@ function M.wait_for_input(cm, mode, config)
     M.saved_keys = consume_typeahead()
 
     repeat
-      local done = process_at_cursor(cm, config)
+      local done
+      if M.from_mode == "i" then
+        done = process_insert_at_cursor(cm, config)
+      else
+        done = process_normal_at_cursor(cm, config)
+      end
       if done then
         if M.to_mode == "v" or M.to_mode == "V" then
           local cur = cm:get_current()

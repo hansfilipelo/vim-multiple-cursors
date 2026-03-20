@@ -228,8 +228,6 @@ function CursorManager:update_current(from_mode, to_mode)
   elseif from_mode == "v" or from_mode == "V" then
     cur:save_unnamed_register()
     cur:remove_visual_selection()
-  elseif from_mode == "i" and to_mode == "n" and self.current_index ~= 1 then
-    vim.cmd("normal! h")
   elseif from_mode == "n" then
     cur:save_unnamed_register()
   end

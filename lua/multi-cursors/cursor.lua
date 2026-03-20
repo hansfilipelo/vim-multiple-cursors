@@ -74,10 +74,15 @@ function Cursor:update_position(pos)
   self:update_highlight()
 end
 
---- Reapply cursor highlight
+--- Reapply cursor highlight.
+--- When insert_col is set, highlight at the insert point instead of position.
 function Cursor:update_highlight()
   highlight.remove_extmark(self.bufnr, self.cursor_extmark_id)
-  self.cursor_extmark_id = highlight.highlight_cursor(self.bufnr, self.position)
+  local pos = self.position
+  if self.insert_col then
+    pos = { self.position[1], self.insert_col }
+  end
+  self.cursor_extmark_id = highlight.highlight_cursor(self.bufnr, pos)
 end
 
 --- Refresh line_length for the cursor's line

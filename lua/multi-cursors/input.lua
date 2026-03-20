@@ -430,6 +430,12 @@ function M.wait_for_input(cm, mode, config)
       end
     until false
 
+    -- After fan-out: refresh all cursor highlights so they're visible.
+    -- Especially important for insert mode where insert_col differs from position.
+    if M.to_mode == "i" then
+      cm:refresh_all_highlights()
+    end
+
     -- Continue loop with updated mode
     current_mode = M.to_mode
     if current_mode == "" then

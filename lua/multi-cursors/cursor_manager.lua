@@ -295,4 +295,12 @@ function CursorManager:reapply_visual_selection()
   end
 end
 
+--- Refresh highlights on all cursors (useful after mode transitions
+--- where positions don't change but display position should, e.g. insert mode)
+function CursorManager:refresh_all_highlights()
+  for _, c in ipairs(self.cursors) do
+    c:update_highlight()
+  end
+end
+
 return CursorManager

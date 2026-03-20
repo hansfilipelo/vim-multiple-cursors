@@ -39,6 +39,16 @@ local function revert_mode(from, to, cm)
     vim.cmd("normal! V")
   elseif to == "n" and from == "i" then
     vim.cmd("stopinsert")
+  elseif to == "i" and vim.fn.mode() ~= "i" then
+    -- Re-enter insert mode if we've been kicked out.
+    -- After exiting insert mode the cursor moves one left,
+    -- so use 'a' (append) to compensate back to the original column.
+    -- At column 1 'a' would overshoot, so use 'startinsert' instead.
+    if vim.fn.col(".") <= 1 then
+      vim.cmd("startinsert")
+    else
+      vim.cmd("noautocmd normal! a")
+    end
   end
 end
 
@@ -58,8 +68,8 @@ local function handle_visual_IA_to_insert(cm)
     if M.saved_char == "I" then
       cm:reposition_all_within_region(true)
     end
-    -- feedkeys lowercase version to enter insert
-    vim.api.nvim_feedkeys(string.lower(M.saved_char), "n", false)
+    -- Queue the lowercase key so the next loop iteration fans it out to all cursors
+    M.saved_keys = string.lower(M.saved_char)
     M.saved_char = ""
   end
 end
@@ -256,8 +266,8 @@ function M.wait_for_input(cm, mode, config)
       end
     end
 
-    -- Clear echo area
-    vim.cmd([[normal! :]])
+    -- Clear echo area (mode-safe, unlike normal! : which exits insert mode)
+    vim.cmd("echo ''")
 
     -- Check for special keys (next/prev/skip) and quit key
     local special_keys_for_mode = {}

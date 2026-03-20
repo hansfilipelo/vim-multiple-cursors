@@ -1,0 +1,204 @@
+*multi-cursors.txt*  Multiple cursors for Neovim (Lua)
+
+                  __  __       _ _   _        ____
+                 |  \/  |_   _| | |_(_)      / ___|   _ _ __ ___  ___  _ __ ___
+                 | |\/| | | | | | __| |_____| |  | | | | '__/ __|/ _ \| '__/ __|
+                 | |  | | |_| | | |_| |_____| |__| |_| | |  \__ \ (_) | |  \__ \
+                 |_|  |_|\__,_|_|\__|_|      \____\__,_|_|  |___/\___/|_|  |___/
+
+
+                              Reference Manual~
+
+==============================================================================
+CONTENTS                                          *multi-cursors-contents*
+    1. Intro ..............................|multi-cursors-intro|
+    2. Usage ..............................|multi-cursors-usage|
+    3. Setup ..............................|multi-cursors-setup|
+    4. Mappings ...........................|multi-cursors-mappings|
+    5. Configuration ......................|multi-cursors-config|
+    6. Highlight ..........................|multi-cursors-highlight|
+    7. Commands ...........................|multi-cursors-commands|
+    8. Hooks ..............................|multi-cursors-hooks|
+    9. License ............................|multi-cursors-license|
+
+==============================================================================
+1. Intro                                            *multi-cursors-intro*
+
+Neovim Lua port of vim-multiple-cursors. Emulates Sublime Text's multiple
+selection feature. Requires Neovim 0.11 or higher.
+
+==============================================================================
+2. Usage                                            *multi-cursors-usage*
+
+Normal mode / Visual mode~
+
+  - Start:        `<C-n>` adds a virtual cursor + selection on the word
+    - Next:       `<C-n>` adds another cursor on the next match
+    - Skip:       `<C-x>` skips the current match
+    - Prev:       `<C-p>` removes the current cursor, goes to previous
+  - Select all:   `<A-n>` selects all matches at once
+
+Use visual mode commands to change all selections (e.g., `c`, `s`, `I`, `A`).
+Press `v` to switch to normal mode with multiple cursors.
+Press `<Esc>` to exit back to regular Vim.
+
+Start with `g<C-n>` to match without word boundaries (like `g*`).
+
+Visual mode with multiple lines selected~
+
+  - Start: `<C-n>` creates a cursor on each line of the selection
+
+==============================================================================
+3. Setup                                            *multi-cursors-setup*
+
+Add to your Neovim config (e.g., `init.lua`): >lua
+
+    require("multi-cursors").setup()
+<
+Or with custom options: >lua
+
+    require("multi-cursors").setup({
+      -- Key bindings (shown with defaults)
+      start_word_key = "<C-n>",       -- Start with word boundary
+      start_key = "g<C-n>",           -- Start without word boundary
+      select_all_word_key = "<A-n>",  -- Select all (word boundary)
+      select_all_key = "g<A-n>",      -- Select all (no boundary)
+      next_key = "<C-n>",             -- Add next match
+      prev_key = "<C-p>",             -- Remove current, go to previous
+      skip_key = "<C-x>",             -- Skip current match
+      quit_key = "<Esc>",             -- Exit multicursor mode
+
+      -- Behavior
+      exit_from_visual_mode = false,  -- Quit key exits from visual mode
+      exit_from_insert_mode = false,  -- Quit key exits from insert mode
+      support_imap = true,            -- Support insert mode mappings
+
+      -- Multi-char operator keys (for normal and visual mode)
+      normal_maps = { d = true, c = true, y = true, ... },
+      visual_maps = { i = true, a = true, f = true, ... },
+    })
+<
+The plugin also respects legacy `g:multi_cursor_*` variables for backwards
+compatibility with vim-multiple-cursors.
+
+==============================================================================
+4. Mappings                                      *multi-cursors-mappings*
+
+Default mappings (can be disabled or overridden via setup): >
+
+    <C-n>   (n) Start multicursor on word under cursor (word boundary)
+    <C-n>   (x) Start multicursor on visual selection
+    g<C-n>  (n) Start multicursor (no word boundary)
+    g<C-n>  (x) Start multicursor on visual selection (no boundary)
+    <A-n>   (n) Select all occurrences of word (word boundary)
+    <A-n>   (x) Select all occurrences of selection
+    g<A-n>  (n) Select all occurrences (no word boundary)
+    g<A-n>  (x) Select all occurrences of selection (no boundary)
+
+While in multicursor mode:
+    <C-n>   Add next match
+    <C-p>   Remove current cursor, go to previous
+    <C-x>   Skip current match, find next
+    <Esc>   Exit multicursor mode
+<
+To disable default mappings: >lua
+
+    require("multi-cursors").setup({
+      start_word_key = false,
+      start_key = false,
+      select_all_word_key = false,
+      select_all_key = false,
+    })
+<
+
+==============================================================================
+5. Configuration                                  *multi-cursors-config*
+
+                                    *multi-cursors-exit_from_visual_mode*
+`exit_from_visual_mode`  (default: false)
+    If true, pressing quit_key in visual mode exits multicursor entirely.
+
+                                    *multi-cursors-exit_from_insert_mode*
+`exit_from_insert_mode`  (default: false)
+    If true, pressing quit_key in insert mode exits multicursor entirely.
+
+                                    *multi-cursors-support_imap*
+`support_imap`  (default: true)
+    If false, insert mode mappings won't be resolved during replay.
+
+                                    *multi-cursors-normal_maps*
+`normal_maps`  (default: see source)
+    Keys that start multi-character commands in normal mode (e.g., `d`, `c`).
+    The plugin waits for additional input when these keys are pressed.
+
+                                    *multi-cursors-visual_maps*
+`visual_maps`  (default: see source)
+    Same as `normal_maps` but for visual mode.
+
+==============================================================================
+6. Highlight                                    *multi-cursors-highlight*
+
+The plugin defines two highlight groups:
+
+  `MultipleCursorsCursor` - Virtual cursor highlight (default: reverse)
+  `MultipleCursorsVisual` - Visual selection highlight (default: links to Visual)
+
+To customize: >lua
+
+    vim.api.nvim_set_hl(0, "MultipleCursorsCursor", { bg = "#ff0000" })
+    vim.api.nvim_set_hl(0, "MultipleCursorsVisual", { bg = "#333333" })
+<
+Or pass in setup: >lua
+
+    require("multi-cursors").setup({
+      cursor_highlight = { reverse = true },
+      visual_highlight = { link = "Visual" },
+    })
+<
+
+==============================================================================
+7. Commands                                      *multi-cursors-commands*
+
+                                                  *:MultipleCursorsFind*
+`:MultipleCursorsFind` {pattern}
+    Create a cursor at each match of {pattern} in the buffer.
+    Accepts a range (defaults to the entire buffer).
+    Example: >
+        :MultipleCursorsFind \<foo\>
+        :'<,'>MultipleCursorsFind bar
+<
+
+==============================================================================
+8. Hooks                                          *multi-cursors-hooks*
+
+The plugin fires User autocommands for integration with other plugins:
+
+  `MultipleCursorsPre`  - Fired when entering multicursor mode
+  `MultipleCursorsPost` - Fired when leaving multicursor mode
+
+It also calls legacy functions if they exist:
+  `Multiple_cursors_before()` - Called before multicursor mode
+  `Multiple_cursors_after()`  - Called after multicursor mode
+
+Example (disable completion during multicursor): >lua
+
+    vim.api.nvim_create_autocmd("User", {
+      pattern = "MultipleCursorsPre",
+      callback = function()
+        -- disable your completion plugin here
+      end,
+    })
+    vim.api.nvim_create_autocmd("User", {
+      pattern = "MultipleCursorsPost",
+      callback = function()
+        -- re-enable your completion plugin here
+      end,
+    })
+<
+
+==============================================================================
+9. License                                        *multi-cursors-license*
+
+MIT License. Based on vim-multiple-cursors by Terry Ma.
+
+ vim:tw=78:sw=4:ft=help:norl:

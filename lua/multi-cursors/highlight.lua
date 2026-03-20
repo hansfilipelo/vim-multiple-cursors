@@ -84,6 +84,16 @@ function M.highlight_region(bufnr, rgn, mode)
     end_col = #last_line_text
   end
 
+  -- Clamp columns to actual line lengths
+  local start_line_text = vim.api.nvim_buf_get_lines(bufnr, start_line, start_line + 1, false)[1] or ""
+  local end_line_text = vim.api.nvim_buf_get_lines(bufnr, end_line, end_line + 1, false)[1] or ""
+  if start_col > #start_line_text then
+    start_col = #start_line_text
+  end
+  if end_col > #end_line_text then
+    end_col = #end_line_text
+  end
+
   return vim.api.nvim_buf_set_extmark(bufnr, ns, start_line, start_col, {
     end_row = end_line,
     end_col = end_col,

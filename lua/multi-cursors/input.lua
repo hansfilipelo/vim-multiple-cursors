@@ -80,6 +80,14 @@ local function ensure_normal_mode()
   end
 end
 
+--- Events to suppress during feedkeys to prevent nvim-cmp, Copilot, ALE, etc.
+--- from interfering with our atomic insert/normal operations.
+--- NOTE: InsertEnter is intentionally NOT listed — we need it for our own
+--- insert-mode detection autocmd in process_normal_at_cursor.
+local suppressed_events = "InsertLeave,TextChangedI,TextChangedP,"
+    .. "CursorMovedI,CompleteDone,CompleteChanged,TextChanged,CursorMoved,"
+    .. "BufModifiedSet,TextYankPost"
+
 --- Process user input at one cursor in insert mode.
 --- Uses atomic "i" + char + Esc to avoid Vim's feedkeys exiting insert mode.
 ---@param cm CursorManager
@@ -115,8 +123,15 @@ local function process_insert_at_cursor(cm, config)
 
     pcall(vim.cmd, "undojoin")
 
+    -- Suppress ALL autocmds during atomic insert — no plugin should fire
+    -- during our synthetic "i" + char + Esc sequence.
+    local saved_ei = vim.o.eventignore
+    vim.o.eventignore = "all"
+
     vim.api.nvim_feedkeys("i" .. M.char .. esc, "n", false)
     vim.api.nvim_feedkeys("", "x", false)
+
+    vim.o.eventignore = saved_ei
 
     -- Update insert_col: after "i" + char + Esc, cursor is on the typed char.
     -- The next insert point is one past that.
@@ -170,9 +185,15 @@ local function process_normal_at_cursor(cm, config)
     end,
   })
 
+  -- Suppress most autocmds to prevent nvim-cmp, Copilot, ALE etc. from
+  -- interfering. We keep InsertEnter unblocked for our own detection above.
+  local saved_ei = vim.o.eventignore
+  vim.o.eventignore = suppressed_events
+
   vim.api.nvim_feedkeys(M.char, "", false)
   vim.api.nvim_feedkeys("", "x", false)
 
+  vim.o.eventignore = saved_ei
   pcall(vim.api.nvim_del_augroup_by_id, augroup)
 
   -- Determine the resulting mode
@@ -273,8 +294,8 @@ function M.wait_for_input(cm, mode, config)
     end
     M.to_mode = ""
 
-    -- Redraw to show highlights
-    vim.cmd("redraw")
+    -- Force full redraw to show highlights (bang clears and redraws completely)
+    vim.cmd("redraw!")
 
     -- Build char from retry + saved + new input
     M.char = M.retry_keys .. M.saved_keys

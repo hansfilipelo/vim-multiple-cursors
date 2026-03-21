@@ -18,6 +18,15 @@ function M.setup_defaults()
       or next(vim.api.nvim_get_hl(0, { name = M.visual_hl_group })) == nil then
     vim.api.nvim_set_hl(0, M.visual_hl_group, { link = "Visual", default = true })
   end
+
+  -- Re-apply highlights when colorscheme changes (`:hi clear` wipes them)
+  vim.api.nvim_create_autocmd("ColorScheme", {
+    group = vim.api.nvim_create_augroup("multi_cursors_hl", { clear = true }),
+    callback = function()
+      vim.api.nvim_set_hl(0, M.cursor_hl_group, { reverse = true, default = true })
+      vim.api.nvim_set_hl(0, M.visual_hl_group, { link = "Visual", default = true })
+    end,
+  })
 end
 
 --- Highlight a single cursor position using extmarks.

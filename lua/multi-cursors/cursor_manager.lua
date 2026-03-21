@@ -58,6 +58,8 @@ end
 --- Initialize settings when entering multicursor mode
 function CursorManager:initialize()
   self.bufnr = vim.api.nvim_get_current_buf()
+  -- Ensure highlight groups exist (colorscheme changes can clear them)
+  highlight.setup_defaults()
   self.saved_settings = {
     virtualedit = vim.o.virtualedit,
     cursorline = vim.o.cursorline,

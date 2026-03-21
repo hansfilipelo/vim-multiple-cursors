@@ -72,7 +72,9 @@ function CursorManager:initialize()
   vim.o.paste = false
   -- Disable Copilot during multi-cursor mode — its InsertEnter/InsertLeave
   -- autocmds and ghost text extmarks interfere with our atomic inserts.
-  vim.g.copilot_enabled = false
+  if vim.g.copilot_enabled ~= nil then
+    vim.g.copilot_enabled = false
+  end
   -- Remove unnamed/unnamedplus from clipboard
   local cb = vim.o.clipboard
   cb = cb:gsub("unnamed%+?", ""):gsub(",,", ","):gsub("^,", ""):gsub(",$", "")

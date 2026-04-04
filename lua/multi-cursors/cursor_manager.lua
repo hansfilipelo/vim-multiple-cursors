@@ -77,6 +77,14 @@ function CursorManager:initialize()
   if vim.g.copilot_enabled ~= nil then
     vim.g.copilot_enabled = false
   end
+  -- Disable nvim-cmp during multi-cursor mode — its InsertEnter and
+  -- TextChangedI handlers trigger the completion popup and interfere
+  -- with our atomic insert replay.
+  local cmp_ok, cmp = pcall(require, "cmp")
+  if cmp_ok then
+    self.saved_settings.cmp_enabled = true
+    cmp.setup.buffer({ enabled = false })
+  end
   -- Remove unnamed/unnamedplus from clipboard
   local cb = vim.o.clipboard
   cb = cb:gsub("unnamed%+?", ""):gsub(",,", ","):gsub("^,", ""):gsub(",$", "")
@@ -104,6 +112,13 @@ function CursorManager:restore_settings()
       vim.g.copilot_enabled = self.saved_settings.copilot_enabled
     else
       vim.g.copilot_enabled = nil
+    end
+    -- Restore nvim-cmp
+    if self.saved_settings.cmp_enabled then
+      local cmp_ok, cmp = pcall(require, "cmp")
+      if cmp_ok then
+        cmp.setup.buffer({ enabled = true })
+      end
     end
   end
   -- Restore unnamed register

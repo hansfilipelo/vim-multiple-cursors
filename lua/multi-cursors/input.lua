@@ -313,6 +313,12 @@ function M.wait_for_input(cm, mode, config)
       while true do
         local map_dict = vim.fn.maparg(M.char, "i", false, true)
         if map_dict and next(map_dict) then
+          -- Lua callback-based mappings (e.g. from nvim-cmp, copilot)
+          -- cannot be resolved to key sequences via maparg/eval. Skip
+          -- imap resolution and use the raw key character instead.
+          if type(map_dict.callback) == "function" then
+            break
+          end
           local rhs
           if map_dict.expr and map_dict.expr ~= 0 then
             rhs = vim.api.nvim_eval(map_dict.rhs)
